@@ -53,14 +53,6 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         });
         services.AddSingleton<IMediaSegmentProvider, IntroDbSegmentProvider>();
 
-        // Register HttpClient for TheIntroDbClient
-        services.AddHttpClient<TheIntroDbClient>(client =>
-        {
-            client.BaseAddress = new Uri("https://api.theintrodb.org/v2");
-            client.Timeout = TimeSpan.FromSeconds(TheIntroDbClient.DefaultTimeoutSeconds);
-        });
-        services.AddSingleton<IMediaSegmentProvider, TheIntroDbSegmentProvider>();
-
         services.AddHostedService<GelatoService>();
         services
             .DecorateSingle<IDtoService, DtoServiceDecorator>()

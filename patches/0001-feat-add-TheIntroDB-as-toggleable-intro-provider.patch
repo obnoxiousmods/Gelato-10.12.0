@@ -1,0 +1,730 @@
+From 4c3b264b9ce07f8091ff2c48998001e62cb1f400 Mon Sep 17 00:00:00 2001
+From: Copilot <copilot@users.noreply.github.com>
+Date: Sat, 4 Apr 2026 21:36:41 -0700
+Subject: [PATCH] feat: add TheIntroDB as toggleable intro provider
+
+Add support for TheIntroDB (theintrodb.org) as an alternative to
+IntroDB for segment detection. The active provider is selected in
+the plugin configuration UI (Advanced tab).
+
+Changes:
+- Services/TheIntroDbClient.cs: new HTTP client for TheIntroDB v2 API
+  (Bearer auth, handles nullable end_ms, maps intro/recap/credits/preview)
+- Providers/TheIntroDbSegmentProvider.cs: IMediaSegmentProvider impl
+  skips when IntroDB provider is active
+- Providers/IntroDbSegmentProvider.cs: skip when TheIntroDB is selected
+- Config/PluginConfiguration.cs: IntroDbProvider enum + IntroDbApiKey field
+- ServiceRegistrator.cs: register new client and provider
+- Config/config.html: provider selector + API key input in Advanced tab
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ Config/PluginConfiguration.cs          |  20 ++
+ Config/config.html                     |  44 ++++
+ Providers/IntroDbSegmentProvider.cs    |   6 +
+ Providers/TheIntroDbSegmentProvider.cs | 287 +++++++++++++++++++++++++
+ ServiceRegistrator.cs                  |   9 +-
+ Services/TheIntroDbClient.cs           | 225 +++++++++++++++++++
+ 6 files changed, 590 insertions(+), 1 deletion(-)
+ create mode 100644 Providers/TheIntroDbSegmentProvider.cs
+ create mode 100644 Services/TheIntroDbClient.cs
+
+diff --git a/Config/PluginConfiguration.cs b/Config/PluginConfiguration.cs
+index 65208e0..c622450 100644
+--- a/Config/PluginConfiguration.cs
++++ b/Config/PluginConfiguration.cs
+@@ -6,6 +6,18 @@ using Microsoft.Extensions.Logging;
+ 
+ namespace Gelato.Config;
+ 
++/// <summary>
++/// Controls which intro/segment database provider is used.
++/// </summary>
++public enum IntroDbProvider
++{
++    /// <summary>Use IntroDB (introdb.app) — intro segments only, no API key required.</summary>
++    IntroDB = 0,
++
++    /// <summary>Use TheIntroDB (theintrodb.org) — intro, recap, credits, and preview segments. Free API key recommended.</summary>
++    TheIntroDB = 1,
++}
++
+ public class PluginConfiguration : BasePluginConfiguration
+ {
+     public string MoviePath { get; set; } = Path.Combine(Path.GetTempPath(), "gelato", "movies");
+@@ -26,6 +38,12 @@ public class PluginConfiguration : BasePluginConfiguration
+     public int MaxCollectionItems { get; set; } = 100;
+     public bool DisableSearch { get; set; } = false;
+     public bool EnableJavaScriptInjection { get; set; } = false;
++
++    /// <summary>Which intro/segment database provider to use.</summary>
++    public IntroDbProvider IntroDbProvider { get; set; } = IntroDbProvider.IntroDB;
++
++    /// <summary>API key for TheIntroDB (theintrodb.org). Optional but recommended to avoid rate limiting.</summary>
++    public string IntroDbApiKey { get; set; } = "";
+     public List<CatalogConfig> Catalogs { get; set; } = [];
+     public List<UserConfig> UserConfigs { get; set; } = [];
+ 
+@@ -97,6 +115,8 @@ public class UserConfig
+             CreateCollections = baseConfig.CreateCollections,
+             MaxCollectionItems = baseConfig.MaxCollectionItems,
+             UserConfigs = baseConfig.UserConfigs,
++            IntroDbProvider = baseConfig.IntroDbProvider,
++            IntroDbApiKey = baseConfig.IntroDbApiKey,
+         };
+     }
+ }
+diff --git a/Config/config.html b/Config/config.html
+index 0f20d73..64ebcf8 100644
+--- a/Config/config.html
++++ b/Config/config.html
+@@ -163,6 +163,30 @@
+               <div class="fieldDescription">Cache duration for external stream URLs.</div>
+             </div>
+ 
++            <h3 class="sectionTitle" style="margin-top: 2em;">Intro Skip Provider</h3>
++
++            <div class="inputContainer">
++              <label class="inputLabel inputLabelUnfocused" for="selIntroDbProvider">Provider:</label>
++              <select is="emby-select" id="selIntroDbProvider" class="emby-select-withcolor emby-select">
++                <option value="0">IntroDB (introdb.app) — intros only, no key required</option>
++                <option value="1">TheIntroDB (theintrodb.org) — intros, recaps, credits &amp; previews</option>
++              </select>
++              <div class="fieldDescription">
++                Choose which database to use for intro/segment detection. TheIntroDB supports more segment types
++                (recap, credits, preview) but requires a free API key to avoid rate limiting.
++              </div>
++            </div>
++
++            <div class="inputContainer" id="theIntroDbApiKeyContainer" style="display: none;">
++              <label class="inputLabel inputLabelUnfocused" for="txtIntroDbApiKey">TheIntroDB API Key:</label>
++              <input is="emby-input" type="text" id="txtIntroDbApiKey" class="emby-input"
++                placeholder="user_xxx:yyy" autocomplete="off" />
++              <div class="fieldDescription">
++                Optional but recommended. Get a free key at
++                <a href="https://theintrodb.org" target="_blank" rel="noopener">theintrodb.org</a>.
++              </div>
++            </div>
++
+           </div>
+ 
+           <!-- User Configs Tab -->
+@@ -275,6 +299,17 @@
+         const txtFFmpegAnalyzeDuration = page.querySelector('#txtFFmpegAnalyzeDuration');
+         const txtFFmpegProbeSize = page.querySelector('#txtFFmpegProbeSize');
+         const chkEnableJavaScriptInjection = page.querySelector('#chkEnableJavaScriptInjection');
++        const selIntroDbProvider = page.querySelector('#selIntroDbProvider');
++        const txtIntroDbApiKey = page.querySelector('#txtIntroDbApiKey');
++        const theIntroDbApiKeyContainer = page.querySelector('#theIntroDbApiKeyContainer');
++
++        if (selIntroDbProvider) {
++          selIntroDbProvider.addEventListener('change', function () {
++            if (theIntroDbApiKeyContainer) {
++              theIntroDbApiKeyContainer.style.display = this.value === '1' ? '' : 'none';
++            }
++          });
++        }
+ 
+         // Catalogs
+         const catalogsList = page.querySelector('#catalogsList');
+@@ -553,6 +588,13 @@
+             if (txtFFmpegAnalyzeDuration) txtFFmpegAnalyzeDuration.value = cfg.FFmpegAnalyzeDuration || "5M";
+             if (txtFFmpegProbeSize) txtFFmpegProbeSize.value = cfg.FFmpegProbeSize || "25M";
+             if (chkEnableJavaScriptInjection) chkEnableJavaScriptInjection.checked = cfg.EnableJavaScriptInjection || false;
++            if (selIntroDbProvider) {
++              selIntroDbProvider.value = String(cfg.IntroDbProvider ?? 0);
++              if (theIntroDbApiKeyContainer) {
++                theIntroDbApiKeyContainer.style.display = (cfg.IntroDbProvider === 1) ? '' : 'none';
++              }
++            }
++            if (txtIntroDbApiKey) txtIntroDbApiKey.value = cfg.IntroDbApiKey || "";
+ 
+             // User Overrides Logic
+             await loadUsers();
+@@ -586,6 +628,8 @@
+             cfg.FFmpegAnalyzeDuration = txtFFmpegAnalyzeDuration.value;
+             cfg.FFmpegProbeSize = txtFFmpegProbeSize.value;
+             cfg.EnableJavaScriptInjection = chkEnableJavaScriptInjection.checked;
++            cfg.IntroDbProvider = selIntroDbProvider ? parseInt(selIntroDbProvider.value, 10) : 0;
++            cfg.IntroDbApiKey = txtIntroDbApiKey ? txtIntroDbApiKey.value.trim() : "";
+ 
+             // Only collect catalog states if catalogs have been loaded (i.e., if we're on catalogs tab or it was loaded)
+             if (allCatalogs.length > 0) {
+diff --git a/Providers/IntroDbSegmentProvider.cs b/Providers/IntroDbSegmentProvider.cs
+index 47e95c4..524cad7 100644
+--- a/Providers/IntroDbSegmentProvider.cs
++++ b/Providers/IntroDbSegmentProvider.cs
+@@ -7,6 +7,7 @@ using System.Diagnostics;
+ using System.Text.RegularExpressions;
+ using System.Threading;
+ using System.Threading.Tasks;
++using Gelato.Config;
+ using Gelato.Services;
+ using Jellyfin.Data.Enums;
+ using Jellyfin.Database.Implementations.Enums;
+@@ -82,6 +83,11 @@ public class IntroDbSegmentProvider : IMediaSegmentProvider
+             "Media segment request should contain an item id."
+         );
+ 
++        if (GelatoPlugin.Instance?.Configuration?.IntroDbProvider == IntroDbProvider.TheIntroDB)
++        {
++            return Array.Empty<MediaSegmentDto>();
++        }
++
+         var item = _libraryManager.GetItemById(request.ItemId);
+         if (item is not Episode episode)
+         {
+diff --git a/Providers/TheIntroDbSegmentProvider.cs b/Providers/TheIntroDbSegmentProvider.cs
+new file mode 100644
+index 0000000..9c0fb16
+--- /dev/null
++++ b/Providers/TheIntroDbSegmentProvider.cs
+@@ -0,0 +1,287 @@
++// Copyright (C) 2026 IntroDB contributors
++// SPDX-License-Identifier: GPL-3.0-only
++
++using System;
++using System.Collections.Generic;
++using System.Diagnostics;
++using System.Text.RegularExpressions;
++using System.Threading;
++using System.Threading.Tasks;
++using Gelato.Config;
++using Gelato.Services;
++using Jellyfin.Data.Enums;
++using Jellyfin.Database.Implementations.Enums;
++using MediaBrowser.Controller;
++using MediaBrowser.Controller.Entities;
++using MediaBrowser.Controller.Entities.TV;
++using MediaBrowser.Controller.Library;
++using MediaBrowser.Controller.MediaSegments;
++using MediaBrowser.Controller.Providers;
++using MediaBrowser.Model;
++using MediaBrowser.Model.Configuration;
++using MediaBrowser.Model.Entities;
++using MediaBrowser.Model.MediaSegments;
++using Microsoft.Extensions.Logging;
++
++namespace Gelato.Providers;
++
++/// <summary>
++/// TheIntroDB media segment provider — supports intro, recap, credits, and preview segments.
++/// </summary>
++public class TheIntroDbSegmentProvider : IMediaSegmentProvider
++{
++    private const long TicksPerSecond = TimeSpan.TicksPerSecond;
++    private const string ImdbIdPattern = @"\btt\d{7,8}\b";
++    private const string SeasonEpisodePattern = @"S(?<season>\d{1,2})E(?<episode>\d{1,2})";
++
++    private static readonly Regex ImdbIdRegex = new(
++        ImdbIdPattern,
++        RegexOptions.Compiled | RegexOptions.IgnoreCase
++    );
++    private static readonly Regex SeasonEpisodeRegex = new(
++        SeasonEpisodePattern,
++        RegexOptions.Compiled | RegexOptions.IgnoreCase
++    );
++
++    private readonly ILibraryManager _libraryManager;
++    private readonly TheIntroDbClient _theIntroDbClient;
++    private readonly ILogger<TheIntroDbSegmentProvider> _logger;
++
++    /// <summary>
++    /// Initializes a new instance of the <see cref="TheIntroDbSegmentProvider"/> class.
++    /// </summary>
++    public TheIntroDbSegmentProvider(
++        ILibraryManager libraryManager,
++        TheIntroDbClient theIntroDbClient,
++        ILogger<TheIntroDbSegmentProvider> logger
++    )
++    {
++        ArgumentNullException.ThrowIfNull(libraryManager);
++        ArgumentNullException.ThrowIfNull(theIntroDbClient);
++        ArgumentNullException.ThrowIfNull(logger);
++
++        _libraryManager = libraryManager;
++        _theIntroDbClient = theIntroDbClient;
++        _logger = logger;
++    }
++
++    /// <inheritdoc />
++    public string Name => "Gelato TheIntroDB";
++
++    /// <inheritdoc />
++    public async Task<IReadOnlyList<MediaSegmentDto>> GetMediaSegments(
++        MediaSegmentGenerationRequest request,
++        CancellationToken cancellationToken
++    )
++    {
++        ArgumentNullException.ThrowIfNull(request);
++        Debug.Assert(request.ItemId != Guid.Empty, "Media segment request should contain an item id.");
++
++        var config = GelatoPlugin.Instance?.Configuration;
++        if (config?.IntroDbProvider == IntroDbProvider.IntroDB)
++        {
++            return Array.Empty<MediaSegmentDto>();
++        }
++
++        _theIntroDbClient.SetApiKey(config?.IntroDbApiKey);
++
++        var item = _libraryManager.GetItemById(request.ItemId);
++        if (item is not Episode episode)
++        {
++            return Array.Empty<MediaSegmentDto>();
++        }
++
++        if (!TryGetImdbId(episode, out var imdbId))
++        {
++            _logger.LogDebug(
++                "Skipping TheIntroDB lookup for {ItemId}: IMDb id missing.",
++                request.ItemId
++            );
++            return Array.Empty<MediaSegmentDto>();
++        }
++
++        if (!TryGetSeasonEpisodeNumbers(episode, out var seasonNumber, out var episodeNumber))
++        {
++            _logger.LogDebug(
++                "Skipping TheIntroDB lookup for {ItemId}: invalid season/episode number.",
++                request.ItemId
++            );
++            return Array.Empty<MediaSegmentDto>();
++        }
++
++        TheIntroDbSegmentResult? result;
++        try
++        {
++            result = await _theIntroDbClient
++                .GetSegmentsAsync(imdbId, seasonNumber, episodeNumber, cancellationToken)
++                .ConfigureAwait(false);
++        }
++        catch (OperationCanceledException)
++        {
++            throw;
++        }
++        catch (Exception exception)
++        {
++            _logger.LogWarning(
++                exception,
++                "TheIntroDB lookup failed for {ItemId} (IMDb {ImdbId} S{Season}E{Episode}).",
++                request.ItemId, imdbId, seasonNumber, episodeNumber
++            );
++            return Array.Empty<MediaSegmentDto>();
++        }
++
++        if (result is null)
++        {
++            _logger.LogInformation(
++                "TheIntroDB returned no segments for {ItemId} (IMDb {ImdbId} S{Season}E{Episode}).",
++                request.ItemId, imdbId, seasonNumber, episodeNumber
++            );
++            return Array.Empty<MediaSegmentDto>();
++        }
++
++        var segments = new List<MediaSegmentDto>();
++
++        AddSegments(segments, request.ItemId, result.Intros, MediaSegmentType.Intro, episode, "intro");
++        AddSegments(segments, request.ItemId, result.Recaps, MediaSegmentType.Recap, episode, "recap");
++        AddSegments(segments, request.ItemId, result.Credits, MediaSegmentType.Outro, episode, "credits");
++        AddSegments(segments, request.ItemId, result.Previews, MediaSegmentType.Preview, episode, "preview");
++
++        return segments;
++    }
++
++    /// <inheritdoc />
++    public ValueTask<bool> Supports(BaseItem item) => ValueTask.FromResult(item is Episode);
++
++    private void AddSegments(
++        List<MediaSegmentDto> output,
++        Guid itemId,
++        List<TheIntroDbSegment> segments,
++        MediaSegmentType type,
++        Episode episode,
++        string typeName
++    )
++    {
++        foreach (var seg in segments)
++        {
++            var startTicks = (long)(seg.StartSeconds * TicksPerSecond);
++
++            long endTicks;
++            if (seg.EndSeconds.HasValue)
++            {
++                endTicks = (long)(seg.EndSeconds.Value * TicksPerSecond);
++            }
++            else if (episode.RunTimeTicks.HasValue && episode.RunTimeTicks.Value > 0)
++            {
++                endTicks = episode.RunTimeTicks.Value;
++            }
++            else
++            {
++                _logger.LogDebug(
++                    "TheIntroDB {Type} segment for {ItemId} has null end_ms and no known runtime; skipping.",
++                    typeName, itemId
++                );
++                continue;
++            }
++
++            if (endTicks <= startTicks)
++            {
++                _logger.LogWarning(
++                    "TheIntroDB returned invalid {Type} segment for {ItemId}: start={Start} >= end={End}.",
++                    typeName, itemId, startTicks, endTicks
++                );
++                continue;
++            }
++
++            if (episode.RunTimeTicks.HasValue
++                && episode.RunTimeTicks.Value > 0
++                && endTicks > episode.RunTimeTicks.Value)
++            {
++                _logger.LogWarning(
++                    "TheIntroDB returned {Type} segment beyond duration for {ItemId}; clamping.",
++                    typeName, itemId
++                );
++                endTicks = episode.RunTimeTicks.Value;
++            }
++
++            output.Add(new MediaSegmentDto
++            {
++                ItemId = itemId,
++                StartTicks = startTicks,
++                EndTicks = endTicks,
++                Type = type,
++            });
++        }
++    }
++
++    private bool TryGetImdbId(Episode episode, out string imdbId)
++    {
++        if (
++            episode.SeriesId != Guid.Empty
++            && _libraryManager.GetItemById(episode.SeriesId) is Series series
++        )
++        {
++            if (
++                series.ProviderIds.TryGetValue(MetadataProvider.Imdb.ToString(), out var seriesImdbId)
++                && !string.IsNullOrWhiteSpace(seriesImdbId)
++            )
++            {
++                imdbId = seriesImdbId;
++                return true;
++            }
++        }
++
++        if (
++            episode.ProviderIds.TryGetValue(MetadataProvider.Imdb.ToString(), out var providerImdbId)
++            && !string.IsNullOrWhiteSpace(providerImdbId)
++        )
++        {
++            imdbId = providerImdbId;
++            return true;
++        }
++
++        if (!string.IsNullOrWhiteSpace(episode.Path))
++        {
++            var match = ImdbIdRegex.Match(episode.Path);
++            if (match.Success)
++            {
++                imdbId = match.Value;
++                return true;
++            }
++        }
++
++        imdbId = string.Empty;
++        return false;
++    }
++
++    private static bool TryGetSeasonEpisodeNumbers(
++        Episode episode,
++        out int seasonNumber,
++        out int episodeNumber
++    )
++    {
++        seasonNumber = episode.AiredSeasonNumber ?? episode.ParentIndexNumber ?? 0;
++        episodeNumber = episode.IndexNumber ?? 0;
++
++        if (seasonNumber > 0 && episodeNumber > 0)
++        {
++            return true;
++        }
++
++        if (!string.IsNullOrWhiteSpace(episode.Path))
++        {
++            var match = SeasonEpisodeRegex.Match(episode.Path);
++            if (
++                match.Success
++                && int.TryParse(match.Groups["season"].Value, out var parsedSeason)
++                && int.TryParse(match.Groups["episode"].Value, out var parsedEpisode)
++            )
++            {
++                seasonNumber = parsedSeason;
++                episodeNumber = parsedEpisode;
++                return seasonNumber > 0 && episodeNumber > 0;
++            }
++        }
++
++        return seasonNumber > 0 && episodeNumber > 0;
++    }
++}
+diff --git a/ServiceRegistrator.cs b/ServiceRegistrator.cs
+index 345575c..aeddbeb 100644
+--- a/ServiceRegistrator.cs
++++ b/ServiceRegistrator.cs
+@@ -3,7 +3,6 @@ using Gelato.Decorators;
+ using Gelato.Filters;
+ using Gelato.Providers;
+ using Gelato.Services;
+-//using IntroDbPlugin.Services;
+ using MediaBrowser.Controller;
+ using MediaBrowser.Controller.Collections;
+ using MediaBrowser.Controller.Dto;
+@@ -54,6 +53,14 @@ public class ServiceRegistrator : IPluginServiceRegistrator
+         });
+         services.AddSingleton<IMediaSegmentProvider, IntroDbSegmentProvider>();
+ 
++        // Register HttpClient for TheIntroDbClient
++        services.AddHttpClient<TheIntroDbClient>(client =>
++        {
++            client.BaseAddress = new Uri("https://api.theintrodb.org/v2");
++            client.Timeout = TimeSpan.FromSeconds(TheIntroDbClient.DefaultTimeoutSeconds);
++        });
++        services.AddSingleton<IMediaSegmentProvider, TheIntroDbSegmentProvider>();
++
+         services.AddHostedService<GelatoService>();
+         services
+             .DecorateSingle<IDtoService, DtoServiceDecorator>()
+diff --git a/Services/TheIntroDbClient.cs b/Services/TheIntroDbClient.cs
+new file mode 100644
+index 0000000..1da626f
+--- /dev/null
++++ b/Services/TheIntroDbClient.cs
+@@ -0,0 +1,225 @@
++// Copyright (C) 2026 IntroDB contributors
++// SPDX-License-Identifier: GPL-3.0-only
++
++using System;
++using System.Collections.Generic;
++using System.Net;
++using System.Net.Http;
++using System.Net.Http.Headers;
++using System.Text.Json;
++using System.Text.Json.Serialization;
++using System.Threading;
++using System.Threading.Tasks;
++using Microsoft.Extensions.Logging;
++
++namespace Gelato.Services;
++
++/// <summary>
++/// Client for retrieving intro/credits/recap/preview timestamps from TheIntroDB (theintrodb.org).
++/// </summary>
++public sealed class TheIntroDbClient
++{
++    /// <summary>
++    /// Default timeout for TheIntroDB requests, in seconds.
++    /// </summary>
++    public const int DefaultTimeoutSeconds = 10;
++
++    private const string BaseUrl = "https://api.theintrodb.org/v2";
++    private const string MediaPath = "/media";
++    private const double MillisecondsPerSecond = 1000d;
++
++    private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
++    {
++        PropertyNameCaseInsensitive = true,
++    };
++
++    private readonly HttpClient _httpClient;
++    private readonly ILogger<TheIntroDbClient> _logger;
++
++    /// <summary>
++    /// Initializes a new instance of the <see cref="TheIntroDbClient"/> class.
++    /// </summary>
++    /// <param name="httpClient">HTTP client.</param>
++    /// <param name="logger">Logger.</param>
++    public TheIntroDbClient(HttpClient httpClient, ILogger<TheIntroDbClient> logger)
++    {
++        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
++        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
++
++        if (_httpClient.BaseAddress is null)
++        {
++            _httpClient.BaseAddress = new Uri(BaseUrl, UriKind.Absolute);
++        }
++
++        _httpClient.DefaultRequestHeaders.Accept.Clear();
++        _httpClient.DefaultRequestHeaders.Accept.Add(
++            new MediaTypeWithQualityHeaderValue("application/json")
++        );
++    }
++
++    /// <summary>
++    /// Set the API key to use for authenticated requests.
++    /// </summary>
++    public void SetApiKey(string? apiKey)
++    {
++        _httpClient.DefaultRequestHeaders.Authorization = string.IsNullOrWhiteSpace(apiKey)
++            ? null
++            : new AuthenticationHeaderValue("Bearer", apiKey);
++    }
++
++    /// <summary>
++    /// Fetch all segment timestamps for a specific episode.
++    /// </summary>
++    /// <param name="imdbId">IMDb id.</param>
++    /// <param name="seasonNumber">Season number.</param>
++    /// <param name="episodeNumber">Episode number.</param>
++    /// <param name="cancellationToken">Cancellation token.</param>
++    /// <returns>Segment result or null if not available.</returns>
++    public async Task<TheIntroDbSegmentResult?> GetSegmentsAsync(
++        string imdbId,
++        int seasonNumber,
++        int episodeNumber,
++        CancellationToken cancellationToken
++    )
++    {
++        if (string.IsNullOrWhiteSpace(imdbId))
++        {
++            throw new ArgumentException("IMDb id must be provided.", nameof(imdbId));
++        }
++
++        if (seasonNumber <= 0)
++        {
++            throw new ArgumentOutOfRangeException(nameof(seasonNumber), "Season number must be positive.");
++        }
++
++        if (episodeNumber <= 0)
++        {
++            throw new ArgumentOutOfRangeException(nameof(episodeNumber), "Episode number must be positive.");
++        }
++
++        var requestUri = new UriBuilder(new Uri(_httpClient.BaseAddress!, MediaPath))
++        {
++            Query = $"imdb_id={Uri.EscapeDataString(imdbId)}&season={seasonNumber}&episode={episodeNumber}",
++        }.Uri;
++
++        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
++        using var response = await _httpClient
++            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
++            .ConfigureAwait(false);
++
++        if (response.StatusCode == HttpStatusCode.NotFound)
++        {
++            return null;
++        }
++
++        if (response.StatusCode == HttpStatusCode.TooManyRequests)
++        {
++            _logger.LogWarning(
++                "TheIntroDB rate limit hit for {ImdbId} S{Season}E{Episode}.",
++                imdbId, seasonNumber, episodeNumber
++            );
++            return null;
++        }
++
++        if (response.StatusCode == HttpStatusCode.BadRequest)
++        {
++            _logger.LogWarning(
++                "TheIntroDB request rejected for {ImdbId} S{Season}E{Episode}.",
++                imdbId, seasonNumber, episodeNumber
++            );
++            return null;
++        }
++
++        if (!response.IsSuccessStatusCode)
++        {
++            _logger.LogWarning(
++                "TheIntroDB request failed for {ImdbId} S{Season}E{Episode} with status {Status}.",
++                imdbId, seasonNumber, episodeNumber, response.StatusCode
++            );
++            return null;
++        }
++
++#if EMBY
++        using var payloadStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
++#else
++        using var payloadStream = await response
++            .Content.ReadAsStreamAsync(cancellationToken)
++            .ConfigureAwait(false);
++#endif
++        var payload = await JsonSerializer
++            .DeserializeAsync<TheIntroDbMediaResponse>(payloadStream, SerializerOptions, cancellationToken)
++            .ConfigureAwait(false);
++
++        if (payload is null)
++        {
++            _logger.LogWarning(
++                "TheIntroDB response could not be parsed for {ImdbId} S{Season}E{Episode}.",
++                imdbId, seasonNumber, episodeNumber
++            );
++            return null;
++        }
++
++        return new TheIntroDbSegmentResult(
++            imdbId,
++            seasonNumber,
++            episodeNumber,
++            ToSegments(payload.Intro),
++            ToSegments(payload.Recap),
++            ToSegments(payload.Credits),
++            ToSegments(payload.Preview)
++        );
++    }
++
++    private static List<TheIntroDbSegment> ToSegments(List<TheIntroDbSegmentRaw>? raw)
++    {
++        var result = new List<TheIntroDbSegment>();
++        if (raw is null) return result;
++
++        foreach (var s in raw)
++        {
++            if (s.StartMs < 0) continue;
++            result.Add(new TheIntroDbSegment(
++                s.StartMs / MillisecondsPerSecond,
++                s.EndMs.HasValue ? s.EndMs.Value / MillisecondsPerSecond : null
++            ));
++        }
++
++        return result;
++    }
++
++    private sealed class TheIntroDbMediaResponse
++    {
++        [JsonPropertyName("intro")]
++        public List<TheIntroDbSegmentRaw>? Intro { get; set; }
++
++        [JsonPropertyName("recap")]
++        public List<TheIntroDbSegmentRaw>? Recap { get; set; }
++
++        [JsonPropertyName("credits")]
++        public List<TheIntroDbSegmentRaw>? Credits { get; set; }
++
++        [JsonPropertyName("preview")]
++        public List<TheIntroDbSegmentRaw>? Preview { get; set; }
++    }
++
++    private sealed class TheIntroDbSegmentRaw
++    {
++        [JsonPropertyName("start_ms")]
++        public long StartMs { get; set; }
++
++        [JsonPropertyName("end_ms")]
++        public long? EndMs { get; set; }
++    }
++}
++
++public sealed record TheIntroDbSegment(double StartSeconds, double? EndSeconds);
++
++public sealed record TheIntroDbSegmentResult(
++    string ImdbId,
++    int Season,
++    int Episode,
++    List<TheIntroDbSegment> Intros,
++    List<TheIntroDbSegment> Recaps,
++    List<TheIntroDbSegment> Credits,
++    List<TheIntroDbSegment> Previews
++);
+-- 
+2.53.0
+

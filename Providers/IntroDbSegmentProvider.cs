@@ -7,7 +7,6 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Gelato.Config;
 using Gelato.Services;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Enums;
@@ -82,11 +81,6 @@ public class IntroDbSegmentProvider : IMediaSegmentProvider
             request.ItemId != Guid.Empty,
             "Media segment request should contain an item id."
         );
-
-        if (GelatoPlugin.Instance?.Configuration?.IntroDbProvider == IntroDbProvider.TheIntroDB)
-        {
-            return Array.Empty<MediaSegmentDto>();
-        }
 
         var item = _libraryManager.GetItemById(request.ItemId);
         if (item is not Episode episode)

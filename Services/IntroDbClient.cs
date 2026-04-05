@@ -3,6 +3,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -10,6 +11,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Gelato.Config;
 using Microsoft.Extensions.Logging;
 
 namespace Gelato.Services;
@@ -26,6 +28,8 @@ public sealed class IntroDbClient
 
     private const string BaseUrl = "https://api.introdb.app";
     private const string IntroPath = "/intro";
+    private const string TheIntroDbBaseUrl = "https://api.theintrodb.org/v2";
+    private const string TheIntroDbMediaPath = "/media";
     private const double MillisecondsPerSecond = 1000d;
 
     private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
@@ -99,6 +103,14 @@ public sealed class IntroDbClient
         Debug.Assert(!string.IsNullOrWhiteSpace(imdbId), "IMDb id must be provided.");
         Debug.Assert(seasonNumber > 0, "Season number must be positive.");
         Debug.Assert(episodeNumber > 0, "Episode number must be positive.");
+
+        var config = GelatoPlugin.Instance?.Configuration;
+        if (config?.IntroDbProvider == IntroDbProvider.TheIntroDB)
+        {
+            return await GetIntroFromTheIntroDbAsync(
+                imdbId, seasonNumber, episodeNumber, config.IntroDbApiKey, cancellationToken
+            ).ConfigureAwait(false);
+        }
 
         var requestUri = BuildIntroUri(imdbId, seasonNumber, episodeNumber);
 
@@ -185,6 +197,81 @@ public sealed class IntroDbClient
         );
     }
 
+    private async Task<IntroDbIntroResult?> GetIntroFromTheIntroDbAsync(
+        string imdbId,
+        int seasonNumber,
+        int episodeNumber,
+        string? apiKey,
+        CancellationToken cancellationToken
+    )
+    {
+        var requestUri = new Uri(
+            $"{TheIntroDbBaseUrl}{TheIntroDbMediaPath}?imdb_id={Uri.EscapeDataString(imdbId)}&season={seasonNumber}&episode={episodeNumber}"
+        );
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
+
+        using var response = await _httpClient
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "TheIntroDB request failed for {ImdbId} S{Season}E{Episode} with status {Status}.",
+                imdbId, seasonNumber, episodeNumber, response.StatusCode
+            );
+            return null;
+        }
+
+#if EMBY
+        using var payloadStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+#else
+        using var payloadStream = await response
+            .Content.ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
+#endif
+        var payload = await JsonSerializer
+            .DeserializeAsync<TheIntroDbMediaResponse>(payloadStream, SerializerOptions, cancellationToken)
+            .ConfigureAwait(false);
+
+        var intro = payload?.Intros?.FirstOrDefault();
+        if (intro is null)
+        {
+            return null;
+        }
+
+        var startMs = intro.StartMs;
+        var endMs = intro.EndMs ?? -1;
+        if (endMs <= startMs || startMs < 0)
+        {
+            _logger.LogWarning(
+                "TheIntroDB returned invalid intro timing for {ImdbId} S{Season}E{Episode}.",
+                imdbId, seasonNumber, episodeNumber
+            );
+            return null;
+        }
+
+        return new IntroDbIntroResult(
+            imdbId,
+            seasonNumber,
+            episodeNumber,
+            startMs / MillisecondsPerSecond,
+            endMs / MillisecondsPerSecond,
+            Confidence: 1.0,
+            SubmissionCount: 0
+        );
+    }
+
     private Uri BuildIntroUri(string imdbId, int seasonNumber, int episodeNumber)
     {
         var baseUri = _httpClient.BaseAddress ?? new Uri(BaseUrl, UriKind.Absolute);
@@ -218,6 +305,21 @@ public sealed class IntroDbClient
 
         [JsonPropertyName("submission_count")]
         public int SubmissionCount { get; set; }
+    }
+
+    private sealed class TheIntroDbMediaResponse
+    {
+        [JsonPropertyName("intro")]
+        public List<TheIntroDbSegment>? Intros { get; set; }
+    }
+
+    private sealed class TheIntroDbSegment
+    {
+        [JsonPropertyName("start_ms")]
+        public long StartMs { get; set; }
+
+        [JsonPropertyName("end_ms")]
+        public long? EndMs { get; set; }
     }
 }
 
