@@ -51,6 +51,21 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             client.BaseAddress = new Uri("https://api.introdb.app");
             client.Timeout = TimeSpan.FromSeconds(IntroDbClient.DefaultTimeoutSeconds);
         });
+        services.AddHttpClient<TheIntroDbClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.theintrodb.org/v2");
+            client.Timeout = TimeSpan.FromSeconds(TheIntroDbClient.DefaultTimeoutSeconds);
+        });
+        services.AddHttpClient<AniSkipClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.aniskip.com/v2");
+            client.Timeout = TimeSpan.FromSeconds(AniSkipClient.DefaultTimeoutSeconds);
+        });
+        services.AddHttpClient<JikanClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.jikan.moe/v4");
+            client.Timeout = TimeSpan.FromSeconds(JikanClient.DefaultTimeoutSeconds);
+        });
         services.AddSingleton<IMediaSegmentProvider, IntroDbSegmentProvider>();
 
         services.AddHostedService<GelatoService>();

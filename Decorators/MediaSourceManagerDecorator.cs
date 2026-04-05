@@ -377,6 +377,18 @@ public sealed class MediaSourceManagerDecorator(
                 return refreshed;
         }
 
+        // Run segment providers for the stub (item) so the web client can find segments.
+        // Gelato resolves the stream item (owner) for probing, but the client queries
+        // MediaSegments by stub ID. Running providers for the stub stores segments under
+        // the stub's ID where the client can find them.
+        if (owner.Id != item.Id)
+        {
+            var stubLibraryOptions = _libraryManager.GetLibraryOptions(item);
+            await _mediaSegmentManager
+                .RunSegmentPluginProviders(item, stubLibraryOptions, false, ct)
+                .ConfigureAwait(false);
+        }
+
         if (item.RunTimeTicks is null && selected.RunTimeTicks is not null)
         {
             item.RunTimeTicks = selected.RunTimeTicks;

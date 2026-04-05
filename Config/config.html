@@ -187,6 +187,18 @@
               </div>
             </div>
 
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input is="emby-checkbox" type="checkbox" id="chkAniSkipEnabled" />
+                <span>Enable AniSkip</span>
+              </label>
+              <div class="fieldDescription">
+                When enabled, AniSkip (aniskip.com) runs alongside the selected provider and supplements
+                anime intro/outro timestamps using MyAnimeList IDs. No API key required.
+                Only applies to anime with a MyAnimeList ID set in Jellyfin metadata.
+              </div>
+            </div>
+
           </div>
 
           <!-- User Configs Tab -->
@@ -302,6 +314,7 @@
         const selIntroDbProvider = page.querySelector('#selIntroDbProvider');
         const txtIntroDbApiKey = page.querySelector('#txtIntroDbApiKey');
         const theIntroDbApiKeyContainer = page.querySelector('#theIntroDbApiKeyContainer');
+        const chkAniSkipEnabled = page.querySelector('#chkAniSkipEnabled');
 
         if (selIntroDbProvider) {
           selIntroDbProvider.addEventListener('change', function () {
@@ -595,6 +608,7 @@
               }
             }
             if (txtIntroDbApiKey) txtIntroDbApiKey.value = cfg.IntroDbApiKey || "";
+            if (chkAniSkipEnabled) chkAniSkipEnabled.checked = cfg.AniSkipEnabled !== false;
 
             // User Overrides Logic
             await loadUsers();
@@ -630,6 +644,7 @@
             cfg.EnableJavaScriptInjection = chkEnableJavaScriptInjection.checked;
             cfg.IntroDbProvider = selIntroDbProvider ? parseInt(selIntroDbProvider.value, 10) : 0;
             cfg.IntroDbApiKey = txtIntroDbApiKey ? txtIntroDbApiKey.value.trim() : "";
+            cfg.AniSkipEnabled = chkAniSkipEnabled ? chkAniSkipEnabled.checked : true;
 
             // Only collect catalog states if catalogs have been loaded (i.e., if we're on catalogs tab or it was loaded)
             if (allCatalogs.length > 0) {

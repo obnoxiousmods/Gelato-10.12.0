@@ -6,7 +6,7 @@
     "name": "Gelato",
     "overview": "Stream external media.",
     "owner": "lstb1t",
-    "targetAbi": "10.11.6.0",
+    "targetAbi": "10.11.5.0",
     "timestamp": "2026-04-05T04:40:42Z",
     "version": "0.26.7.4"
 }

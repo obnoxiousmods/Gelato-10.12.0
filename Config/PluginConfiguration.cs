@@ -44,6 +44,9 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>API key for TheIntroDB (theintrodb.org). Optional but recommended to avoid rate limiting.</summary>
     public string IntroDbApiKey { get; set; } = "";
+
+    /// <summary>When enabled, AniSkip (aniskip.com) runs alongside the primary intro provider to supplement anime intro/outro timestamps.</summary>
+    public bool AniSkipEnabled { get; set; } = true;
     public List<CatalogConfig> Catalogs { get; set; } = [];
     public List<UserConfig> UserConfigs { get; set; } = [];
 
@@ -117,6 +120,7 @@ public class UserConfig
             UserConfigs = baseConfig.UserConfigs,
             IntroDbProvider = baseConfig.IntroDbProvider,
             IntroDbApiKey = baseConfig.IntroDbApiKey,
+            AniSkipEnabled = baseConfig.AniSkipEnabled,
         };
     }
 }
