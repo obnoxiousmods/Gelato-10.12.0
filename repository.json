@@ -1,19 +1,19 @@
 [
   {
     "category": "General",
-    "description": "Stream external media.\n",
+    "description": "Stream external media.",
     "guid": "94EA4E14-8163-4989-96FE-0A2094BC2D6A",
     "name": "Gelato",
     "overview": "Stream external media.",
     "owner": "Joey",
     "versions": [
       {
-        "changelog": "Resolved missing IItemPersistenceService and fixed publish workflow.",
-        "checksum": "9e371305863ebc89bfff248aae50a4ee",
-        "sourceUrl": "https://github.com/obnoxiousmods/Gelato-10.12.0/releases/download/v1.10.12.3/gelato_1.10.12.0.zip",
+        "changelog": "Automatically generated release.",
+        "checksum": "b5840210838d1704e1a463547fc5ed47",
+        "sourceUrl": "https://github.com/obnoxiousmods/Gelato-10.12.0/releases/download/v$VERSION/gelato_$VERSION.zip",
         "targetAbi": "10.12.0.0",
-        "timestamp": "2026-04-10T21:14:54Z",
-        "version": "1.10.12.0"
+        "timestamp": "2026-04-10T21:59:51Z",
+        "version": "1.10.12.1"
       }
     ]
   }
