@@ -8,11 +8,11 @@
     "owner": "Joey",
     "versions": [
       {
-        "changelog": "Stable build against 10.11.8 packages with 10.12.0.0 target ABI metadata.",
+        "changelog": "Final alignment of plugin version and ZIP naming.",
         "checksum": "",
-        "sourceUrl": "https://github.com/obnoxiousmods/Gelato-10.12.0/releases/download/v1.10.12.6/gelato_1.10.12.6.zip",
+        "sourceUrl": "https://github.com/obnoxiousmods/Gelato-10.12.0/releases/download/v1.10.12.7/gelato_1.10.12.0.zip",
         "targetAbi": "10.12.0.0",
-        "timestamp": "2026-04-10T21:32:52Z",
+        "timestamp": "2026-04-10T21:34:22Z",
         "version": "1.10.12.0"
       }
     ]
