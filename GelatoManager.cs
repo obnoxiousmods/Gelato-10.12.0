@@ -22,7 +22,6 @@ public sealed class GelatoManager(
     ILoggerFactory loggerFactory,
     IProviderManager provider,
     GelatoItemRepository repo,
-    IItemPersistenceService itemPersistence,
     IFileSystem fileSystem,
     IMemoryCache memoryCache,
     IServerConfigurationManager serverConfig,
@@ -554,7 +553,7 @@ public sealed class GelatoManager(
             upsertedStreams.Add(streamItem);
         }
 
-        itemPersistence.SaveItems(upsertedStreams, ct);
+        repo.SaveItems(upsertedStreams, ct);
 
         var newIds = new HashSet<Guid>(upsertedStreams.Select(x => x.Id));
         var stale = existingByGuid
@@ -592,7 +591,7 @@ public sealed class GelatoManager(
             }
         }
 
-        itemPersistence.SaveItems(toSave, ct);
+        repo.SaveItems(toSave, ct);
         upsertedStreams.Add(video);
 
         stopwatch.Stop();
@@ -862,7 +861,7 @@ public sealed class GelatoManager(
                 episodesInserted++;
                 _log.LogTrace("Created episode {EpisodeName}", epMeta.GetName());
             }
-            itemPersistence.SaveItems(episodeList, CancellationToken.None);
+            repo.SaveItems(episodeList, CancellationToken.None);
         }
 
         stopwatch.Stop();
@@ -969,7 +968,7 @@ public sealed class GelatoManager(
             parent.AddChild(item);
         }
 
-        itemPersistence.SaveItems(baseItems, CancellationToken.None);
+        repo.SaveItems(baseItems, CancellationToken.None);
         return baseItems;
     }
 
