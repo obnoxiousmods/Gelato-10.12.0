@@ -46,3 +46,4 @@ jobs:
         with:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
+          branch: gh-pages
