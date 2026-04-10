@@ -11,10 +11,41 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(ReferencePath)' == ''">
     <PackageReference Include="Jellyfin.Model" Version="10.11.8" />
     <PackageReference Include="Jellyfin.Controller" Version="10.11.8" />
     <PackageReference Include="Jellyfin.Common" Version="10.11.8" />
+    <PackageReference Include="MonoTorrent" Version="3.0.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="System.Reflection.TypeExtensions" Version="4.7.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(ReferencePath)' != ''">
+    <Reference Include="Jellyfin.Model">
+      <HintPath>$(ReferencePath)/Jellyfin.Model.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Jellyfin.Controller">
+      <HintPath>$(ReferencePath)/Jellyfin.Controller.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Jellyfin.Common">
+      <HintPath>$(ReferencePath)/Jellyfin.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Common">
+      <HintPath>$(ReferencePath)/MediaBrowser.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Controller">
+      <HintPath>$(ReferencePath)/MediaBrowser.Controller.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Model">
+      <HintPath>$(ReferencePath)/MediaBrowser.Model.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <PackageReference Include="MonoTorrent" Version="3.0.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="System.Reflection.TypeExtensions" Version="4.7.0" />

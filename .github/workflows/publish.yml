@@ -21,8 +21,22 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
+      - name: Download Jellyfin 10.12.0 binaries for references
+        run: |
+          mkdir -p ./jellyfin-libs
+          # Download portable Jellyfin server to extract DLLs
+          # We use the latest stable 10.12.0 release if available, or a known dev build
+          wget -q https://github.com/jellyfin/jellyfin/releases/download/v10.12.0/jellyfin_10.12.0-portable.tar.gz || \
+          wget -q https://github.com/jellyfin/jellyfin/releases/download/v10.11.8/jellyfin_10.11.8-portable.tar.gz
+          
+          tar -xzf jellyfin_*.tar.gz -C ./jellyfin-libs --wildcards "*.dll"
+          ls -l ./jellyfin-libs/*.dll | head -n 5
+
       - name: Build
-        run: dotnet build Gelato.csproj -c Release -f net9.0
+        run: |
+          # Use the downloaded DLLs as reference path if they exist
+          export ReferencePath="$(pwd)/jellyfin-libs"
+          dotnet build Gelato.csproj -c Release -f net9.0 /p:ReferencePath="$ReferencePath"
 
       - name: Prepare publish directory
         run: |
@@ -89,7 +103,7 @@ jobs:
           TARGET_ABI="10.12.0.0"
           
           # Delay a moment to ensure release asset is fully available
-          sleep 5
+          sleep 10
           
           wget https://github.com/${{ github.repository }}/releases/download/v$VERSION/gelato_$VERSION.zip
           CHECKSUM=$(md5sum gelato_$VERSION.zip | awk '{print $1}')
