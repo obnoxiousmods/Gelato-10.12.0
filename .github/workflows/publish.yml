@@ -24,17 +24,44 @@ jobs:
       - name: Download Jellyfin 10.12.0 binaries for references
         run: |
           mkdir -p ./jellyfin-libs
-          # Download portable Jellyfin server to extract DLLs
-          # We use the latest stable 10.12.0 release if available, or a known dev build
-          wget -q https://github.com/jellyfin/jellyfin/releases/download/v10.12.0/jellyfin_10.12.0-portable.tar.gz || \
-          wget -q https://github.com/jellyfin/jellyfin/releases/download/v10.11.8/jellyfin_10.11.8-portable.tar.gz
           
-          tar -xzf jellyfin_*.tar.gz -C ./jellyfin-libs --wildcards "*.dll"
+          # Use a python script to find the latest 10.12.0 unstable tarball from the repo
+          cat <<'EOF' > find_latest.py
+          import urllib.request
+          import re
+          import sys
+
+          url = "https://repo.jellyfin.org/releases/server/linux/unstable/combined/"
+          try:
+              with urllib.request.urlopen(url) as response:
+                  html = response.read().decode('utf-8')
+                  # Find all tar.gz files that look like 10.12.0
+                  # Example: jellyfin_10.12.0-unstable.20240410.1_amd64.tar.gz
+                  matches = re.findall(r'href="([^"]*jellyfin_10\.12\.0[^"]*amd64\.tar\.gz)"', html)
+                  if matches:
+                      # Get the last one (usually newest)
+                      print(url + matches[-1])
+                      sys.exit(0)
+          except Exception as e:
+              print(f"Error: {e}", file=sys.stderr)
+          
+          # Fallback to stable if unstable not found
+          print("https://repo.jellyfin.org/releases/server/linux/stable/combined/jellyfin_10.11.8_amd64.tar.gz")
+          EOF
+
+          DOWNLOAD_URL=$(python3 find_latest.py)
+          echo "Downloading from: $DOWNLOAD_URL"
+          wget -q "$DOWNLOAD_URL" -O jellyfin.tar.gz
+          
+          tar -xzf jellyfin.tar.gz -C ./jellyfin-libs --strip-components=1 --wildcards "*/jellyfin/*.dll" || \
+          tar -xzf jellyfin.tar.gz -C ./jellyfin-libs --wildcards "*.dll"
+          
+          # Flatten if needed
+          find ./jellyfin-libs -name "*.dll" -exec cp {} ./jellyfin-libs/ \;
           ls -l ./jellyfin-libs/*.dll | head -n 5
 
       - name: Build
         run: |
-          # Use the downloaded DLLs as reference path if they exist
           export ReferencePath="$(pwd)/jellyfin-libs"
           dotnet build Gelato.csproj -c Release -f net9.0 /p:ReferencePath="$ReferencePath"
 
