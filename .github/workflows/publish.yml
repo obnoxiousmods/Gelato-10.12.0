@@ -25,17 +25,16 @@ jobs:
         run: |
           mkdir -p ./jellyfin-libs
           
-          # Use a python script to find the latest 10.12.0 unstable tarball from the repo
+          # Find the latest 10.12.0 unstable tarball from the new repo path
           cat <<'EOF' > find_latest.py
           import urllib.request
           import re
           import sys
 
-          url = "https://repo.jellyfin.org/releases/server/linux/unstable/combined/"
+          url = "https://repo.jellyfin.org/files/server/linux/latest-unstable/amd64/"
           try:
               with urllib.request.urlopen(url) as response:
                   html = response.read().decode('utf-8')
-                  # Find all tar.gz files that look like 10.12.0
                   # Example: jellyfin_10.12.0-unstable.20240410.1_amd64.tar.gz
                   matches = re.findall(r'href="([^"]*jellyfin_10\.12\.0[^"]*amd64\.tar\.gz)"', html)
                   if matches:
@@ -43,20 +42,21 @@ jobs:
                       print(url + matches[-1])
                       sys.exit(0)
           except Exception as e:
-              print(f"Error: {e}", file=sys.stderr)
+              print(f"Error searching for unstable: {e}", file=sys.stderr)
           
           # Fallback to stable if unstable not found
-          print("https://repo.jellyfin.org/releases/server/linux/stable/combined/jellyfin_10.11.8_amd64.tar.gz")
+          print("https://repo.jellyfin.org/files/server/linux/stable/amd64/jellyfin_10.11.8_amd64.tar.gz")
           EOF
 
           DOWNLOAD_URL=$(python3 find_latest.py)
           echo "Downloading from: $DOWNLOAD_URL"
           wget -q "$DOWNLOAD_URL" -O jellyfin.tar.gz
           
+          # Extract only DLLs into jellyfin-libs
           tar -xzf jellyfin.tar.gz -C ./jellyfin-libs --strip-components=1 --wildcards "*/jellyfin/*.dll" || \
           tar -xzf jellyfin.tar.gz -C ./jellyfin-libs --wildcards "*.dll"
           
-          # Flatten if needed
+          # Flatten the structure so all DLLs are in one folder
           find ./jellyfin-libs -name "*.dll" -exec cp {} ./jellyfin-libs/ \;
           ls -l ./jellyfin-libs/*.dll | head -n 5
 
