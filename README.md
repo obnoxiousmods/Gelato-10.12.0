@@ -35,7 +35,7 @@ Bring the power of Stremio addons directly into Jellyfin. This plugin replaces J
    
    **p2p support currently in beta**
 
-2. Make sure you are running Jellyfin 10.12.0 and add the `repository.json` from this fork to your plugin repositories.
+2. Make sure you are running Jellyfin 10.12.0 and add `https://raw.githubusercontent.com/obnoxiousmods/Gelato-10.12.0/refs/heads/main/repository.json` to your plugin repositories.
 
 3. Install and configure the plugin.
    **Note:** Only **AIOStreams** is supported.
