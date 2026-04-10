@@ -3,9 +3,11 @@
 </div>
 
 <div align="center">
-  <h1><b>Gelato</b></h1>
-  <p><i>Jellyfin Stremio Integration Plugin</i></p>
+  <h1><b>Gelato (Fork for 10.12.0)</b></h1>
+  <p><i>Jellyfin Stremio Integration Plugin - Jellyfin 10.12.0 Support</i></p>
 </div>
+
+This is a fork of [Gelato](https://github.com/obnoxiousmods/Gelato) updated to support Jellyfin 10.12.0.
 
 Bring the power of Stremio addons directly into Jellyfin. This plugin replaces Jellyfin’s default search with Stremio-powered results and can automatically import entire catalogs into your library through scheduled tasks, seamlessly injecting them into Jellyfin’s database so they behave like native items.
 
@@ -33,7 +35,7 @@ Bring the power of Stremio addons directly into Jellyfin. This plugin replaces J
    
    **p2p support currently in beta**
 
-2. Make sure you are running Jellyfin 10.11 and add `https://raw.githubusercontent.com/lostb1t/Gelato/refs/heads/gh-pages/repository.json` to your plugin repositories.
+2. Make sure you are running Jellyfin 10.12.0 and add the `repository.json` from this fork to your plugin repositories.
 
 3. Install and configure the plugin.
    **Note:** Only **AIOStreams** is supported.
