@@ -8,11 +8,11 @@
     "owner": "Joey",
     "versions": [
       {
-        "changelog": "Final alignment of plugin version and ZIP naming.",
+        "changelog": "Jellyfin 10.12.0 support fork.",
         "checksum": "",
-        "sourceUrl": "https://github.com/obnoxiousmods/Gelato-10.12.0/releases/download/v1.10.12.7/gelato_1.10.12.0.zip",
+        "sourceUrl": "https://github.com/obnoxiousmods/Gelato-10.12.0/releases/download/v1.10.12.0/gelato_1.10.12.0.zip",
         "targetAbi": "10.12.0.0",
-        "timestamp": "2026-04-10T21:34:22Z",
+        "timestamp": "2026-04-10T21:37:50Z",
         "version": "1.10.12.0"
       }
     ]
