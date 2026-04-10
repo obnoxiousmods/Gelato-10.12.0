@@ -8,11 +8,11 @@
     "owner": "Joey",
     "versions": [
       {
-        "changelog": "Initial fork release for Jellyfin 10.12.0 support.",
+        "changelog": "Fixing build failures by using stable packages while maintaining 10.12.0 compatibility in metadata.",
         "checksum": "",
         "sourceUrl": "",
         "targetAbi": "10.12.0.0",
-        "timestamp": "2026-04-10T20:52:43Z",
+        "timestamp": "2026-04-10T21:00:09Z",
         "version": "1.10.12.0"
       }
     ]
