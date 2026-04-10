@@ -22,7 +22,18 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Build
-        run: dotnet publish Gelato.csproj -c Release -f net9.0 -o ./publish
+        run: dotnet build Gelato.csproj -c Release -f net9.0
+
+      - name: Prepare publish directory
+        run: |
+          mkdir -p ./publish
+          cp bin/Release/net9.0/Gelato.dll ./publish/
+          cp bin/Release/net9.0/Mono.Nat.dll ./publish/
+          cp bin/Release/net9.0/MonoTorrent*.dll ./publish/
+          cp bin/Release/net9.0/ReusableTasks.dll ./publish/
+          # Copy Harmony or Stub if they exist (ignoring errors if not)
+          cp bin/Release/net9.0/0Harmony.dll ./publish/ 2>/dev/null || true
+          cp bin/Release/net9.0/JellyfinLoaderStub*.dll ./publish/ 2>/dev/null || true
 
       - name: Prepare meta.json
         run: |
