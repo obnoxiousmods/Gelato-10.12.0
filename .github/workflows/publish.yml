@@ -21,17 +21,24 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
-      - name: Download Jellyfin binaries for references
+      - name: Download Jellyfin binaries for references via APT
         run: |
           mkdir -p ./jellyfin-libs
-          # Using the stable path which seems to be the only one working consistently
-          wget -q https://repo.jellyfin.org/files/server/linux/stable/amd64/jellyfin_10.11.8_amd64.tar.gz -O jellyfin.tar.gz
+          # Add Jellyfin repo
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg
+          echo "deb [arch=$( dpkg --print-architecture ) signed-by=/etc/apt/keyrings/jellyfin.gpg] https://repo.jellyfin.org/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/jellyfin.list
+          sudo apt-get update
           
-          tar -xzf jellyfin.tar.gz -C ./jellyfin-libs --strip-components=1 --wildcards "*/jellyfin/*.dll" || \
-          tar -xzf jellyfin.tar.gz -C ./jellyfin-libs --wildcards "*.dll"
+          # Download jellyfin-server and jellyfin-web packages
+          apt-get download jellyfin-server
           
-          # Flatten the structure
-          find ./jellyfin-libs -name "*.dll" -exec cp {} ./jellyfin-libs/ \;
+          # Extract the deb
+          ar x jellyfin-server_*.deb
+          tar -xf data.tar.xz
+          
+          # Find all DLLs and move to references folder
+          find ./usr/lib/jellyfin/bin -name "*.dll" -exec cp {} ./jellyfin-libs/ \;
           ls -l ./jellyfin-libs/MediaBrowser.*.dll
 
       - name: Build
