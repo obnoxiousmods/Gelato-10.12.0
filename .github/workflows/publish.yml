@@ -36,6 +36,8 @@ jobs:
 
       - name: Prepare meta.json
         run: |
+          # The version in meta.json should match what Jellyfin expect.
+          # We'll use the Version from the csproj.
           VERSION=$(grep '<Version>' Gelato.csproj | sed -E 's/.*<Version>(.*)<\/Version>.*/\1/')
           TARGET_ABI="10.12.0.0"
           cat <<EOF > ./publish/meta.json
@@ -82,3 +84,5 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           pagesBranch: gh-pages
+          # By default this action reads all releases and generates a manifest based on the assets found.
+          # The version in the manifest will match the 'version' in the meta.json asset.
