@@ -22,13 +22,7 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Build
-        run: |
-          # Use latest unstable versions from NuGet if 10.12.0 literal isn't found
-          dotnet build Gelato.csproj -c Release -f net9.0 || \
-          (dotnet add package Jellyfin.Controller --prerelease && \
-           dotnet add package Jellyfin.Model --prerelease && \
-           dotnet add package Jellyfin.Common --prerelease && \
-           dotnet build Gelato.csproj -c Release -f net9.0)
+        run: dotnet build Gelato.csproj -c Release -f net9.0
 
       - name: Prepare publish directory
         run: |
